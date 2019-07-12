@@ -1,0 +1,87 @@
+
+
+#--------------------------------------------------------------------- mftk init
+
+#If mftk is not provided, fail;
+ifndef __MFTK__
+$(error rmld build node requires mftk)
+endif
+
+#Include mftk;
+include $(__MFTK__)
+
+#------------------------------------------------------------------------- entry
+
+$(eval $(call mftk.node.entry,rmld,build_dir build_arch nostd_inc_dir))
+
+$(eval $(call mftk.check.path,rmld.build_dir))
+
+$(eval $(call mftk.check.path,rmld.nostd_inc_dir))
+
+#------------------------------------------------------------------- directories
+
+#Create locals for often used directories;
+KT_OUT := $(rmld.build_dir)
+KT_SRC := $(rmld.build_dir)/src
+KT_OBJ := $(rmld.build_dir)/obj
+
+#--------------------------------------------------------------------- toolchain
+
+#Transmit the architecture to compile for;
+$(eval $(call mftk.utility.define,toolchain,target,$(rmld.build_arch)))
+
+#Call the toolchain utility;
+$(eval $(call mftk.utility.execute,toolchain))
+
+#----------------------------------------------------------- compilation options
+
+#The compilation will use sources in the output directory;
+INC := -I$(KT_OUT)/include/ -I$(rmld.nostd_inc_dir)
+
+#Update compilation flags;
+CFLAGS += -std=c89 -Wall -Wno-variadic-macros -pedantic -O3 -nostdinc -nostdlib -nodefaultlibs
+
+#If the compilation should be made in debug mode, add the flag;
+ifdef rmld.debug
+CFLAGS += -DDEBUG
+endif
+
+#All files are built ith the same options; this shortcut factorises;
+KT_CC = $(CC) $(INC) $(CFLAGS)
+
+#----------------------------------------------------- processor dependent files
+
+#The type of processor will be used to choose processor dependent files;
+PROC_TYPE :=
+
+#Cross make is used, with the arch environment
+$(eval $(call mftk.utility.define,cross_make,environment,arch))
+
+#architecture dependent makefiles can be found in the arch directory;
+$(eval $(call mftk.utility.define,cross_make,directory,$(.wdir)/arch))
+
+#Transfer our target
+$(eval $(call mftk.utility.define,cross_make,target,$(rmld.build_arch)))
+
+#Call cross make; It should include makefiles that define the processor type;
+$(eval $(call mftk.utility.execute,cross_make))
+
+#If the processor type has not been defined, fail;
+$(eval $(call mftk.require_defined,PROC_TYPE,rmld))
+
+#------------------------------------------------------------------------- build
+
+.phony: rmld
+rmld:
+
+	mkdir -p $(KT_OUT)
+	mkdir -p $(KT_OBJ)
+
+	cp -r include/ $(KT_OUT)/
+	cp -r src/ $(KT_OUT)/
+	cp arch/rel_$(PROC_TYPE).c $(KT_OUT)/src/rel.c
+
+	$(KT_CC) -c $(KT_SRC)/loader.c -o $(KT_OBJ)/loader.o
+	$(KT_CC) -c $(KT_SRC)/rel.c -o $(KT_OBJ)/rel.o
+
+	$(AR) -cr -o $(KT_OUT)/rmld.ar $(KT_OBJ)/*

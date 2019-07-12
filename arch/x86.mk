@@ -1,0 +1,1 @@
+PROC_TYPE := x86
